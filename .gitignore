@@ -2,3 +2,6 @@ depth_rgb.py
 forest.py
 pc.py
 test.py
+agglomerative.py
+dbscan.py
+meanshift.py
