@@ -4,10 +4,39 @@ import open3d as o3d
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 import heapq
+from collections import deque
 
-def a_star(grid, start, goal):    
+
+def a_star(grid, start, goal):
     # Grid dimensions
     rows, cols = len(grid), len(grid[0])
+    safe_distance = 20  # Minimum distance from obstacles
+
+    # Precompute the distance to the nearest obstacle for each cell
+    def compute_distances_to_obstacles(grid):
+        distances = [[float('inf')] * cols for _ in range(rows)]
+        queue = deque()
+
+        # Enqueue all obstacles with a distance of 0
+        for i in range(rows):
+            for j in range(cols):
+                if grid[i][j] != 0:
+                    distances[i][j] = 0
+                    queue.append((i, j))
+
+        # Perform BFS to compute distances
+        while queue:
+            x, y = queue.popleft()
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < rows and 0 <= ny < cols:
+                    if distances[nx][ny] > distances[x][y] + 1:
+                        distances[nx][ny] = distances[x][y] + 1
+                        queue.append((nx, ny))
+
+        return distances
+
+    distances_to_obstacles = compute_distances_to_obstacles(grid)
 
     # Define the heuristic function (prefer cells with higher y values)
     def heuristic(cell):
@@ -43,6 +72,12 @@ def a_star(grid, start, goal):
             # Check if the neighbor is within bounds and is an empty cell (0)
             if 0 <= nx < rows and 0 <= ny < cols and grid[nx][ny] == 0:
                 new_cost = g_costs[current_cell] + 1  # Assuming a cost of 1 for each step
+                
+                # Add additional cost if the cell is too close to an obstacle
+                distance = distances_to_obstacles[nx][ny]
+                if distance < safe_distance:
+                    new_cost += (safe_distance - distance)
+
                 if neighbor not in g_costs or new_cost < g_costs[neighbor]:
                     g_costs[neighbor] = new_cost
                     priority = new_cost + heuristic(neighbor)
@@ -51,6 +86,8 @@ def a_star(grid, start, goal):
 
     # If there's no path, return None
     return None
+
+
 
 # Configure depth stream
 pipeline = rs.pipeline()
@@ -140,27 +177,21 @@ try:
             for idx, label in enumerate(labels):
                 if label != -1:  # Ignore noise points
                     cluster_grid[occupied_cells[idx][0], occupied_cells[idx][1]] = label + 1
-            # print(labels)
+
             
-            # if max(labels) == 1:
-            # print(max(labels))
-            # print(cluster_grid != 0)
-            # for i in range(cluster_grid.shape[0]):
-            #     for j in range(cluster_grid.shape[1]):
-            #         if cluster_grid[i][j] != 0:
-            #             print(cluster_grid[i][j])
+            for i in range(cluster_grid.shape[0]):
+                for j in range(cluster_grid.shape[1]):
+                    if cluster_grid[i][j] > 0: # check if it belogns to a cluster
+                        try:
+                            cluster_grid[i-5:i+5, j-5:j+5] = -1
+                        except:
+                            continue
+
             path = a_star(cluster_grid, (0, 200), (499, 200))
             if path:
                 for (x, y) in path:
                     cluster_grid[x][y] = max(labels)+1
-            # if path:
-            #     print("path found")
-            #     for (x, y) in path:
-            #         cluster_grid[x, y] = 100
-            # else:
-            #     print("$$$$$$$")
-            #     print(max(labels))
-            #     print("$$$$$$$")
+
                 
             # Display the clusters
             plt.imshow(cluster_grid, origin='lower', cmap='tab20')
